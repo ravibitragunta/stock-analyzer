@@ -97,9 +97,17 @@ def run_market_gate() -> dict:
 
     # ── PCR (Put-Call Ratio) — fetched from NSE or approximated ──
     pcr = _fetch_pcr()
-    pcr_ok_for_longs = pcr >= config.PCR_BULL_MIN
-    pcr_short_trigger = pcr < config.PCR_BEAR_MAX
-    logger.info("PCR: %.3f", pcr)
+    if pcr is None:
+        logger.error("PCR data unavailable — all gates closed for safety")
+        pcr_source = "FAILED"
+        pcr_ok_for_longs = False
+        pcr_short_trigger = False
+        pcr = 0.0  # safe dummy value for downstream logic
+    else:
+        pcr_source = "NSE_LIVE"
+        pcr_ok_for_longs = pcr >= config.PCR_BULL_MIN
+        pcr_short_trigger = pcr < config.PCR_BEAR_MAX
+        logger.info("PCR: %.3f", pcr)
 
     # ── Advance-Decline ratio ──
     ad_ratio = fetcher.fetch_advance_decline()
@@ -135,10 +143,11 @@ def run_market_gate() -> dict:
         "nifty_20ema":       round(nifty_20ema, 2),
         "nifty_above_20ema": int(nifty_above_ema),
         "vix_level":         round(vix_level, 2),
-        "pcr":               round(pcr, 3),
+        "pcr":               round(pcr, 3) if pcr_source == "NSE_LIVE" else None,
+        "pcr_source":        pcr_source,
         "advance_decline":   round(ad_ratio, 3),
-        "long_allowed":      int(long_allowed),
-        "short_allowed":     int(short_allowed),
+        "long_allowed":      0 if pcr_source == "FAILED" else int(long_allowed),
+        "short_allowed":     0 if pcr_source == "FAILED" else int(short_allowed),
         "market_regime":     regime,
         "global_macro_score": None,  # filled by AI layer later
     }
@@ -188,8 +197,8 @@ def _fetch_pcr() -> float:
             if ce_oi > 0:
                 return round(pe_oi / ce_oi, 3)
     except Exception as e:
-        logger.warning("PCR fetch failed: %s — using neutral 1.0", e)
-    return 1.0   # neutral fallback
+        logger.warning("PCR fetch failed: %s", e)
+    return None   # safe failure
 
 
 def _gate_failure(reason: str) -> dict:
@@ -217,7 +226,7 @@ def _log_gate_result(gate: dict):
     long_str = "✅ OPEN" if gate["long_allowed"] else "❌ CLOSED"
     short_str = "✅ OPEN" if gate["short_allowed"] else "❌ CLOSED"
     logger.info(
-        "Market Gate Result → Long: %s | Short: %s | Regime: %s | VIX: %.1f | PCR: %.2f",
+        "Market Gate Result → Long: %s | Short: %s | Regime: %s | VIX: %.1f | PCR: %.2f (%s)",
         long_str, short_str, gate["market_regime"],
-        gate["vix_level"] or 0, gate["pcr"] or 0,
+        gate["vix_level"] or 0, gate["pcr"] or 0, gate.get("pcr_source", "UNKNOWN"),
     )

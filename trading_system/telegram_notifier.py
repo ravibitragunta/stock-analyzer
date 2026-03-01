@@ -110,9 +110,14 @@ def send_eod_watchlist(gate: dict, short_signals: list[dict], watchlist: list[di
             exp_move  = s.get("expected_move", "N/A")
             sector    = s.get("sector", "")
             conf_icon = {"HIGH": "🟢", "MEDIUM": "🟡", "LOW": "🔴"}.get(ai_conf, "⚪")
+            
+            qs = s.get("quality_score", 0)
+            tradeable = s.get("tradeable", True)
+            qs_str = f"📊 Quality Score: {qs}/100 ✅" if tradeable else f"📊 Quality Score: {qs}/100 ⚠️ Below threshold — review carefully"
 
             text += (
                 f"<b>{symbol}</b>  <i>{sector}</i>\n"
+                f"  {qs_str}\n"
                 f"  State   : {state}\n"
                 f"  Entry   : ₹{entry:.2f} | SL: ₹{stop:.2f} | Risk: {risk:.1f}%\n"
                 f"  Move    : {exp_move}\n"

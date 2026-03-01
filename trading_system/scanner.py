@@ -247,16 +247,52 @@ def _count_compression_days(ohlcv: list[dict], max_look: int) -> int:
 # MAIN SCAN
 # ─────────────────────────────────────────────
 
-def scan_for_compression(filtered_stocks: list[dict]) -> list[dict]:
+def check_sector_strength(sector_name: str, ohlcv_fetcher) -> bool:
+    """Check if the sector index is above its 20-EMA."""
+    if sector_name not in config.SECTOR_INDICES:
+        return True
+        
+    index_key = config.SECTOR_INDICES[sector_name]
+    candles = ohlcv_fetcher(index_key, days=30)
+    if not candles:
+        return True
+        
+    closes = [c["close"] for c in candles]
+    from validator import compute_ema
+    emas = compute_ema(closes, period=20)
+    
+    if len(emas) < 20 or math.isnan(emas[-1]):
+        return True
+        
+    return closes[-1] > emas[-1]
+
+
+def scan_for_compression(filtered_stocks: list[dict], ohlcv_fetcher=None) -> list[dict]:
     """
     Run compression detection on all stocks in the filtered universe.
 
     Returns a list of compression result dicts for stocks currently in compression.
     These will be saved as COMPRESSION_DETECTED signals.
     """
+    if ohlcv_fetcher is None:
+        from data_fetcher import fetch_index_ohlcv
+        ohlcv_fetcher = fetch_index_ohlcv
+
+    sector_cache = {}
     results = []
+    
     for stock in filtered_stocks:
         symbol = stock["symbol"]
+        sector = stock.get("sector", "Unknown")
+
+        if getattr(config, "SECTOR_FILTER_ENABLED", False):
+            if sector not in sector_cache:
+                sector_cache[sector] = check_sector_strength(sector, ohlcv_fetcher)
+            
+            if not sector_cache[sector]:
+                logger.debug("%s: sector %s below 20-EMA — skipped", symbol, sector)
+                continue
+
         ohlcv = db.get_ohlcv(symbol, days=180)   # 6 months for ATR percentile calc
         if not ohlcv:
             continue

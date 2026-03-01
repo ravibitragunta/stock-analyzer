@@ -35,3 +35,4 @@ __pycache__/
 
 # Reports
 signals_report.html
+*.zip

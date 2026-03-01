@@ -90,6 +90,10 @@ def generate_html(gate: dict, long_signals: list[dict], short_signals: list[dict
     long_rows = ""
     for s in long_signals:
         ai_badge = _ai_badge(s.get("ai_confidence", "N/A"))
+        qs = s.get("quality_score", 0)
+        qs_color = "#00c853" if qs >= 75 else ("#ffab40" if qs >= 60 else "#ff1744")
+        qs_badge = "" if s.get("tradeable", True) else " <br><span style='color:#ff1744;font-size:10px;'>⚠ Below Threshold</span>"
+        
         long_rows += f"""
         <tr>
           <td><strong>{s['symbol']}</strong><br><small>{s.get('sector','')}</small></td>
@@ -98,6 +102,7 @@ def generate_html(gate: dict, long_signals: list[dict], short_signals: list[dict
           <td>₹{s.get('stop_loss',0):.2f}</td>
           <td>{s.get('risk_pct',0):.2f}%</td>
           <td>{s.get('expected_move','N/A')}</td>
+          <td style="color:{qs_color};font-weight:bold;">{qs}{qs_badge}</td>
           <td>{ai_badge}</td>
           <td class="ai-insight">{s.get('ai_summary') or '—'}</td>
         </tr>"""
@@ -107,6 +112,10 @@ def generate_html(gate: dict, long_signals: list[dict], short_signals: list[dict
     for pe in pe_signals:
         theta_icon = "⚠️ Yes" if pe.get("theta_warning") else "✅ No"
         ai_badge = _ai_badge(pe.get("ai_confidence", "N/A"))
+        qs = pe.get("quality_score", 0)
+        qs_color = "#00c853" if qs >= 75 else ("#ffab40" if qs >= 60 else "#ff1744")
+        qs_badge = "" if pe.get("tradeable", True) else " <br><span style='color:#ff1744;font-size:10px;'>⚠ Below Threshold</span>"
+
         short_rows += f"""
         <tr>
           <td><strong>{pe['symbol']}</strong><br><small>{pe.get('sector','')}</small></td>
@@ -117,6 +126,7 @@ def generate_html(gate: dict, long_signals: list[dict], short_signals: list[dict
           <td>₹{pe.get('target_premium',0):.1f}</td>
           <td>₹{pe.get('stop_loss_underlying',0):.2f}</td>
           <td>{theta_icon}</td>
+          <td style="color:{qs_color};font-weight:bold;">{qs}{qs_badge}</td>
           <td>{ai_badge}</td>
           <td class="ai-insight">{pe.get('ai_summary') or '—'}</td>
         </tr>"""
@@ -256,7 +266,7 @@ def generate_html(gate: dict, long_signals: list[dict], short_signals: list[dict
     <thead>
       <tr>
         <th>Symbol</th><th>State</th><th>Entry Zone</th><th>Stop Loss</th>
-        <th>Risk %</th><th>Expected Move</th><th>AI Score</th><th>AI Insight</th>
+        <th>Risk %</th><th>Expected Move</th><th>Quality Score</th><th>AI Score</th><th>AI Insight</th>
       </tr>
     </thead>
     <tbody>{long_rows or long_empty}</tbody>
@@ -271,7 +281,7 @@ def generate_html(gate: dict, long_signals: list[dict], short_signals: list[dict
       <tr>
         <th>Symbol</th><th>State</th><th>PE Strike</th><th>Expiry</th>
         <th>Est. Premium</th><th>Target Premium</th><th>Underlying SL</th>
-        <th>Theta Risk</th><th>AI Score</th><th>AI Insight</th>
+        <th>Theta Risk</th><th>Quality Score</th><th>AI Score</th><th>AI Insight</th>
       </tr>
     </thead>
     <tbody>{short_rows or short_empty}</tbody>
@@ -322,6 +332,13 @@ def run_reporter(gate: dict, long_signals: list[dict], short_signals: list[dict]
                  watchlist: list[dict], pe_signals: list[dict],
                  mode: str = "eod") -> dict:
     """Main entry point. Generates both output files."""
+    import signal_ranker
+    
+    # Wire in the Quality Score ranker for both signals sets
+    long_signals = signal_ranker.rank_signals(long_signals, gate)
+    short_signals = signal_ranker.rank_signals(short_signals, gate)
+    pe_signals = signal_ranker.rank_signals(pe_signals, gate)
+
     auto_refresh = (mode == "intraday")
     payload = generate_json(gate, long_signals, short_signals, watchlist, pe_signals)
     generate_html(gate, long_signals, short_signals, watchlist, pe_signals, auto_refresh)

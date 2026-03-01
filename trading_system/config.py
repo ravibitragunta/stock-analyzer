@@ -20,8 +20,9 @@ INSTRUMENTS_FILE = BASE_DIR.parent / "NSE_instruments.json"
 # UPSTOX API
 # ─────────────────────────────────────────────
 UPSTOX_BASE_URL = "https://api.upstox.com/v2"
-UPSTOX_API_KEY = os.getenv("UPSTOX_API_KEY", "94ca7c1d-75e9-4fa6-b88c-c543f3a469b8")          # Set via env or edit here
-UPSTOX_ACCESS_TOKEN = os.getenv("UPSTOX_ACCESS_TOKEN", "") # OAuth access token
+UPSTOX_API_KEY = os.getenv("UPSTOX_API_KEY", "")          # Set via env or edit here
+UPSTOX_ACCESS_TOKEN = os.getenv("UPSTOX_ACCESS_TOKEN", 
+"") # OAuth access token
 
 # Rate limiting — exponential backoff
 RATE_LIMIT_RETRIES = 3
@@ -68,6 +69,7 @@ INTRADAY_CANDLE_MINUTES = 15   # WebSocket candle interval
 # ─────────────────────────────────────────────
 MIN_TRADED_VALUE_CR = 75       # Avg daily traded value > ₹75 Cr
 MIN_PRICE = 150                # Stock price > ₹150
+SECTOR_FILTER_ENABLED = True   # Filter out stocks if their sector is bearish
 
 # ─────────────────────────────────────────────
 # MARKET GATE
@@ -122,8 +124,8 @@ ACCEPTANCE_MAX_DAYS    = 2     # Check acceptance over next 2 days
 # ─────────────────────────────────────────────
 # STOP LOSS & ENTRY
 # ─────────────────────────────────────────────
-ATR_MULTIPLIER          = 1.5   # Stop = entry - (ATR_MULTIPLIER * ATR14)
-MAX_STOP_FROM_ENTRY_PCT = 1.5   # If stop > 1.5% from entry → INVALID signal
+ATR_MULTIPLIER          = 2.0   # Stop = entry - (ATR_MULTIPLIER * ATR14)
+MAX_STOP_FROM_ENTRY_PCT = 3.5   # If stop > 3.5% from entry → log warning but still emit signal
 ENTRY_ZONE_BUFFER_PCT   = 0.5   # Entry zone = expansion close to close + 0.5%
 RISK_PER_TRADE_PCT      = 1.0   # Max % of capital to risk per trade (for position sizing)
 
@@ -234,7 +236,7 @@ VIX_POLL_SEC           = 120      # Poll VIX every 2 minutes
 # ─────────────────────────────────────────────
 BACKTEST_START_DATE    = "2024-01-01"
 BACKTEST_END_DATE      = "2024-12-31"
-BACKTEST_SLIPPAGE_PCT  = 0.1
+BACKTEST_SLIPPAGE_PCT  = 0.15
 MONTE_CARLO_RUNS       = 1000
 
 # ─────────────────────────────────────────────

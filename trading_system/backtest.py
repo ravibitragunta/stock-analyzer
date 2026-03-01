@@ -82,6 +82,7 @@ def replay_signals(start_date: str, end_date: str) -> list[dict]:
             if sig and not _has_active_signal(active_signals, symbol):
                 sig["id"] = f"bt_{symbol}_{sim_date}"
                 sig["date"] = sim_date
+                sig["pending_entry"] = True
                 active_signals.append(sig)
                 new_sigs.append(sig)
 
@@ -95,6 +96,14 @@ def replay_signals(start_date: str, end_date: str) -> list[dict]:
             ohlcv_today = db.get_ohlcv_range(symbol, start_date, sim_date)
             if not ohlcv_today:
                 continue
+
+            # Process pending entry before evaluating outcome
+            if sig.get("pending_entry"):
+                if sim_date > sig["date"]:
+                    sig["actual_entry_price"] = ohlcv_today[-1]["open"]
+                    sig["pending_entry"] = False
+                else:
+                    continue  # Wait for next day to open trade
 
             outcome = _evaluate_signal_outcome(sig, ohlcv_today, sim_date)
             if outcome:
@@ -123,11 +132,11 @@ def replay_signals(start_date: str, end_date: str) -> list[dict]:
 
 def _evaluate_signal_outcome(signal: dict, ohlcv: list[dict], today: str) -> Optional[dict]:
     """Check if a signal has resolved (win/loss/expire) as of today."""
-    if today <= signal["date"]:
+    if today <= signal["date"] or signal.get("pending_entry"):
         return None  # Too early
 
     today_bar  = ohlcv[-1]
-    entry      = signal.get("entry_zone_low", 0)
+    entry      = signal.get("actual_entry_price") or signal.get("entry_zone_low", 0)
     stop       = signal.get("stop_loss", 0)
     sig_type   = signal["signal_type"]
     valid_days = signal.get("valid_for_days", config.DEFAULT_VALID_FOR_DAYS)

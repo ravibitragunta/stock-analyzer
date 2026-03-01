@@ -44,6 +44,23 @@ def compute_ema(prices: list[float], period: int) -> list[float]:
     return ema
 
 
+def compute_vwap(ohlcv: list[dict], period: int = 5) -> list[float]:
+    """Calculate 5-day rolling volume-weighted typical price."""
+    vwap_vals = []
+    for i in range(len(ohlcv)):
+        if i < period - 1:
+            vwap_vals.append(float("nan"))
+            continue
+        window = ohlcv[i - period + 1 : i + 1]
+        vol_sum = sum(b["volume"] for b in window)
+        if vol_sum == 0:
+            vwap_vals.append(vwap_vals[-1] if vwap_vals else float("nan"))
+            continue
+        typical_vol_sum = sum(((b["high"] + b["low"] + b["close"]) / 3.0) * b["volume"] for b in window)
+        vwap_vals.append(typical_vol_sum / vol_sum)
+    return vwap_vals
+
+
 # ─────────────────────────────────────────────
 # STEP 2: EXPANSION CANDLE CHECK
 # ─────────────────────────────────────────────
@@ -120,35 +137,36 @@ def check_expansion(symbol: str, ohlcv: list[dict], compression_result: dict) ->
     # ── Direction determined ──
     signal_type = "LONG" if is_long else "SHORT"
 
-    # ── Calculate entry zone and stop loss ──
+    # ── Calculate entry zone ──
     entry_low  = today_close
     entry_high = today_close * (1 + config.ENTRY_ZONE_BUFFER_PCT / 100)
 
-    if is_long:
-        stop_loss = today_low
-        stop_pct  = (entry_low - stop_loss) / entry_low * 100
-    else:
-        stop_loss = today_high
-        stop_pct  = (stop_loss - entry_high) / entry_high * 100
-
-    # ── Reject if stop > MAX_STOP_FROM_ENTRY_PCT ──
-    if stop_pct > config.MAX_STOP_FROM_ENTRY_PCT:
-        logger.debug(
-            "%s: stop %.2f%% from entry — exceeds %.1f%% limit → INVALID",
-            symbol, stop_pct, config.MAX_STOP_FROM_ENTRY_PCT,
-        )
-        return None
-
-    # ── ATR-based stop (take the tighter of the two) ──
+    # ── ATR-based stop ONLY ──
     atrs = compute_atr(ohlcv[-30:], period=14)
     atr14 = next((a for a in reversed(atrs) if not math.isnan(a)), None)
+    
     if atr14:
-        atr_stop_long  = entry_low  - config.ATR_MULTIPLIER * atr14
-        atr_stop_short = entry_high + config.ATR_MULTIPLIER * atr14
         if is_long:
-            stop_loss = max(stop_loss, atr_stop_long)   # tighter of candle-low and ATR-stop
+            stop_loss = entry_low - config.ATR_MULTIPLIER * atr14
+            stop_pct  = (entry_low - stop_loss) / entry_low * 100
         else:
-            stop_loss = min(stop_loss, atr_stop_short)
+            stop_loss = entry_high + config.ATR_MULTIPLIER * atr14
+            stop_pct  = (stop_loss - entry_high) / entry_high * 100
+    else:
+        # Fallback if ATR calculation fails
+        if is_long:
+            stop_loss = today_low
+            stop_pct  = (entry_low - stop_loss) / entry_low * 100
+        else:
+            stop_loss = today_high
+            stop_pct  = (stop_loss - entry_high) / entry_high * 100
+
+    # ── Log warning if stop > MAX_STOP_FROM_ENTRY_PCT ──
+    if stop_pct > config.MAX_STOP_FROM_ENTRY_PCT:
+        logger.warning(
+            "%s: stop %.2f%% from entry — exceeds %.1f%% limit (signal still emitted)",
+            symbol, stop_pct, config.MAX_STOP_FROM_ENTRY_PCT,
+        )
 
     # ── Expected move estimate (2-4× ATR from entry) ──
     if atr14:
@@ -232,6 +250,10 @@ def check_acceptance(signal: dict, ohlcv: list[dict]) -> bool:
     emas   = compute_ema(closes, 20)
     ema_20 = emas[-1]
 
+    # ── VWAP calculation ──
+    vwaps = compute_vwap(ohlcv, period=5)
+    vwap_by_date = {ohlcv[i]["date"]: vwaps[i] for i in range(len(ohlcv))}
+
     # ── Expansion candle body ──
     exp_body = abs(signal.get("_exp_open", exp_close) - exp_close)
     if exp_body == 0:
@@ -256,6 +278,19 @@ def check_acceptance(signal: dict, ohlcv: list[dict]) -> bool:
         if sig_type == "LONG" and bar_close < ema_20:
             return False
         if sig_type == "SHORT" and bar_close > ema_20:
+            return False
+
+        # ── 2.5 VWAP Acceptance Filter ──
+        typical_price = (bar_high + bar_low + bar_close) / 3.0
+        day_vwap = vwap_by_date.get(day_bar["date"], 0)
+        
+        # We check both the VWAP and the 20-EMA for the typical price
+        # given the nuanced wording in the prompt.
+        if sig_type == "LONG" and (typical_price < day_vwap or typical_price < ema_20):
+            logger.debug("%s: VWAP check failed on acceptance day", signal["symbol"])
+            return False
+        if sig_type == "SHORT" and (typical_price > day_vwap or typical_price > ema_20):
+            logger.debug("%s: VWAP check failed on acceptance day", signal["symbol"])
             return False
 
         # ── 3. Volume declining check ──
