@@ -1,0 +1,20 @@
+{
+  "date": "2026-02-25",
+  "run_time": "17:12 IST",
+  "market_gate": {
+    "nifty_close": 25424.65,
+    "nifty_20ema": 25638.07,
+    "nifty_above_20ema": false,
+    "vix_level": 14.15,
+    "pcr": 1.0,
+    "advance_decline": 0.5,
+    "long_allowed": false,
+    "short_allowed": true,
+    "market_regime": "NEUTRAL",
+    "global_macro_score": null
+  },
+  "long_signals": [],
+  "short_signals": [],
+  "watchlist": [],
+  "backtest_summary": {}
+}

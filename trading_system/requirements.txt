@@ -1,0 +1,7 @@
+# Nifty 200 Swing Trading System — Dependencies
+# Install with: pip install -r requirements.txt
+
+requests>=2.31.0
+pandas>=2.0.0
+numpy>=1.24.0
+websocket-client>=1.6.0   # For intraday WebSocket mode

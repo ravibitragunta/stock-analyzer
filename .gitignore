@@ -1,0 +1,37 @@
+# Environments
+.env
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Databases
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# Data/JSON files downloaded dynamically
+*.json
+*.json.gz
+!trading_system/signals.json
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# MacOS
+.DS_Store
+
+# Reports
+signals_report.html
